@@ -20,6 +20,7 @@
 template <typename T>
 T trace(const std::vector<T>& h_input, size_t rows, size_t cols) {
   // TODO: Implement the trace function
+  wtf
   return T(-1);
 }
 
