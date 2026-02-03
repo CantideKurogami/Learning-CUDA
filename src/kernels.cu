@@ -107,6 +107,40 @@ constexpr int WMMA_M=16,WMMA_N=16,WMMA_K=16;
 constexpr int Br=64,Bc=64;
 constexpr int PAD=8;
 
+template<typename T,int D>
+__global__ void flashAttentionKernel(
+                              const T* __restrict__ Q,
+                              const T* __restrict__ K,
+                              const T* __restrict__ V,
+                              T* __restrict__ O,
+                              int q_len,
+                              int kv_len,
+                              int num_q_heads,
+                              int num_kv_heads,
+                              int head_dim,
+                              float scale,
+                              bool causal
+  ) {
+  const int batch=blockIdx.x,head=blockIdx.y,q_blk=blockIdx.z;
+  const int tID =threadIdx.x,warpID=tID/32;
+  const int num_warps=blockDim.x/32;
+  const int kv_head=head/(num_q_heads/num_kv_heads);//算出当前q对应的kv头
+
+  const size_t q_off=(size_t)batch*q_len*num_q_heads*head_dim+head*head_dim;
+  const size_t kv_off=(size_t)batch*kv_len*num_kv_heads*head_dim+kv_head*head_dim;
+
+  constexpr int D_pad=D+PAD;
+  extern __shared__ T smem[];
+  T* sQ=(T*)smem;
+  T* sK=(T*)sQ+Br*D_pad;
+  T* sV=(T*)sK+Bc*D_pad;
+  float* sS=(float*)(sV+Bc*D_pad);//在共享内存上分配QKVS的指针
+
+
+
+
+}
+
 template <typename T>
 void flashAttention(const std::vector<T>& h_q, const std::vector<T>& h_k,
                     const std::vector<T>& h_v, std::vector<T>& h_o,
