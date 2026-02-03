@@ -22,6 +22,7 @@ ifeq ($(PLATFORM),nvidia)
     CC          	:= nvcc
     TEST_OBJ    	:= tester/tester_nv.o
 	PLATFORM_DEFINE := -DPLATFORM_NVIDIA
+	CFLAGS          += -arch=native
 else ifeq ($(PLATFORM),iluvatar)
     CC          	:= clang++
 	CFLAGS          := -std=c++17 -O3
