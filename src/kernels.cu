@@ -103,6 +103,10 @@ T trace(const std::vector<T>& h_input, size_t rows, size_t cols) {
  * @param[in] head_dim Dimension size of each attention head
  * @param[in] is_causal Whether to apply causal masking
  */
+constexpr int WMMA_M=16,WMMA_N=16,WMMA_K=16;
+constexpr int Br=64,Bc=64;
+constexpr int PAD=8;
+
 template <typename T>
 void flashAttention(const std::vector<T>& h_q, const std::vector<T>& h_k,
                     const std::vector<T>& h_v, std::vector<T>& h_o,
