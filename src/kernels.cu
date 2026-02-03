@@ -17,17 +17,79 @@
  * @param cols Number of columns in the matrix.
  * @return The trace (sum of diagonal values) of the matrix.
  */
+template<typename T>
+__device__ T warp_reduce(T input) {
+#pragma unroll
+  for (int offset=16;offset>0;offset>>=1) {
+    input+=__shfl_down_sync(0xFFFFFFFF,input,offset);
+  }
+  return input;
+}
+
+template<typename T>
+__global__ void traceKernels(const T* d_input,T* d_result,size_t diag_len ,size_t cols) {
+  extern __shared__ char smem_raw[];
+  T* shared_mem = reinterpret_cast<T*>(smem_raw);
+
+  const size_t tid=threadIdx.x;
+  const size_t idx=blockIdx.x*blockDim.x+tid;
+
+  T warp_sum_val=0;
+  for (size_t i=idx;i<diag_len;i+=blockDim.x*gridDim.x) {
+    warp_sum_val+=d_input[i*cols+i];
+  }
+  T warp_sum=warp_reduce(warp_sum_val);
+  const size_t laneID=tid%32;
+  const size_t warpID=tid/32;
+  if (laneID==0) {
+    shared_mem[warpID]=warp_sum;
+  }
+  __syncthreads();
+
+  if (warpID==0) {
+    T block_sum_val=(tid<(blockDim.x+31)/32)?shared_mem[tid]:T(0);
+    T block_sum= warp_reduce(block_sum_val);
+    if (tid==0) {
+      atomicAdd(d_result,block_sum);
+    }
+  }
+}
+
 template <typename T>
 T trace(const std::vector<T>& h_input, size_t rows, size_t cols) {
   // TODO: Implement the trace function
-  wtf
-  test load diff
-  return T(-1);
-}
+  if (rows==0||cols==0)return T(0);
 
+  const size_t diag_len=std::min(rows,cols);
+  const size_t input_size=rows*cols;
+
+  T* d_input=nullptr;
+  T* d_result=nullptr;
+  RUNTIME_CHECK(cudaMalloc(&d_input,input_size*sizeof(T)));
+  RUNTIME_CHECK(cudaMalloc(&d_result,sizeof(T)));
+
+  RUNTIME_CHECK(cudaMemcpy(d_input,h_input.data(),input_size*sizeof(T),cudaMemcpyHostToDevice));
+  RUNTIME_CHECK(cudaMemset(d_result,0,sizeof(T)));
+
+  size_t blockSize=256;
+  size_t grimSize=(diag_len+blockSize-1)/blockSize;
+  size_t smemSize = ((blockSize+31)/32) * sizeof(T);
+  traceKernels<T><<<grimSize,blockSize,smemSize>>>(d_input,d_result,diag_len,cols);
+
+  RUNTIME_CHECK(cudaGetLastError());
+  RUNTIME_CHECK(cudaDeviceSynchronize());
+
+  T result;
+  RUNTIME_CHECK(cudaMemcpy(&result,d_result,sizeof(T),cudaMemcpyDeviceToHost));
+
+  RUNTIME_CHECK(cudaFree(d_input));
+  RUNTIME_CHECK(cudaFree(d_result));
+
+  return result;
+}
 /**
  * @brief Computes flash attention for given query, key, and value tensors.
- * 
+ *
  * @tparam T Data type (float) for input/output tensors
  * @param[in] h_q Query tensor of shape [batch_size, tgt_seq_len, query_heads, head_dim]
  * @param[in] h_k Key tensor of shape [batch_size, src_seq_len, kv_heads, head_dim]
@@ -35,7 +97,7 @@ T trace(const std::vector<T>& h_input, size_t rows, size_t cols) {
  * @param[out] h_o Output attention tensor of shape [batch_size, tgt_seq_len, query_heads, head_dim]
  * @param[in] batch_size Batch dimension size
  * @param[in] target_seq_len Target sequence length
- * @param[in] src_seq_len Source sequence length  
+ * @param[in] src_seq_len Source sequence length
  * @param[in] query_heads Number of query attention heads
  * @param[in] kv_heads Number of key/value heads (supports grouped query attention)
  * @param[in] head_dim Dimension size of each attention head
@@ -44,8 +106,8 @@ T trace(const std::vector<T>& h_input, size_t rows, size_t cols) {
 template <typename T>
 void flashAttention(const std::vector<T>& h_q, const std::vector<T>& h_k,
                     const std::vector<T>& h_v, std::vector<T>& h_o,
-                    int batch_size, int target_seq_len, int src_seq_len, 
-                    int query_heads, int kv_heads, int head_dim, bool is_causal) {       
+                    int batch_size, int target_seq_len, int src_seq_len,
+                    int query_heads, int kv_heads, int head_dim, bool is_causal) {
   // TODO: Implement the flash attention function
 }
 
